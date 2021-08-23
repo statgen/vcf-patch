@@ -202,81 +202,81 @@ int main(int argc, char** argv)
     return EXIT_SUCCESS;
   }
 
-	savvy::reader in(args.input_path().c_str());
-	if (!in)
-		return std::fprintf(stderr, "Failed to open \"%s\" : %s", args.input_path().c_str(), strerror(errno)), EXIT_FAILURE;
+  savvy::reader in(args.input_path().c_str());
+  if (!in)
+    return std::fprintf(stderr, "Failed to open \"%s\" : %s", args.input_path().c_str(), strerror(errno)), EXIT_FAILURE;
 
-	auto hdrs = in.headers();
-	hdrs.emplace_back("INFO","<ID=PATCH_VARIANT,Number=0,Type=Flag,Description=\"Patched variant\">");
+  auto hdrs = in.headers();
+  hdrs.emplace_back("INFO","<ID=PATCH_VARIANT,Number=0,Type=Flag,Description=\"Patched variant\">");
 
-	std::unordered_set<std::string> out_info_keys {"PATCH_VARIANT"};
-	for (const auto& h : in.info_headers())
-	  out_info_keys.insert(h.id);
+  std::unordered_set<std::string> out_info_keys {"PATCH_VARIANT"};
+  for (const auto& h : in.info_headers())
+    out_info_keys.insert(h.id);
 
-	savvy::writer out(args.output_path(), args.output_mode(), hdrs, in.samples(), args.compression_level());
-	if (!out)
-		return fprintf(stderr, "Couldn't open \"%s\" for writing: %s\n", args.output_path().c_str(), strerror(errno)), EXIT_FAILURE;
+  savvy::writer out(args.output_path(), args.output_mode(), hdrs, in.samples(), args.compression_level());
+  if (!out)
+    return fprintf(stderr, "Couldn't open \"%s\" for writing: %s\n", args.output_path().c_str(), strerror(errno)), EXIT_FAILURE;
 
-	savvy::variant rec;
+  savvy::variant rec;
 
-	in >> rec;
+  in >> rec;
 
-	for (const auto& reg : args.patch_regions())
-	{
-	  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
-	  // Copy records before region and discard those in region
-	  while (in && rec.position() <= reg.to())
-	  {
-	    if (rec.position() < reg.from())
-	    {
-	      if (!(out << rec))
-	        return std::fprintf(stderr, "Failed to write to %s\n", args.output_path().c_str()), EXIT_FAILURE;
-	    }
-	    in >> rec;
-	  }
-	  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+  for (const auto& reg : args.patch_regions())
+  {
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+    // Copy records before region and discard those in region
+    while (in && rec.position() <= reg.to())
+    {
+      if (rec.position() < reg.from())
+      {
+        if (!(out << rec))
+          return std::fprintf(stderr, "Failed to write to %s\n", args.output_path().c_str()), EXIT_FAILURE;
+      }
+      in >> rec;
+    }
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
-	  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
-	  // Copy region from patch file
-	  savvy::reader in_patch(args.patch_input_path());
-	  in_patch.reset_bounds(reg);
-	  if (!in_patch)
-	    return std::fprintf(stderr, "Failed to query %s from %s : %s", (reg.chromosome() + ":" + std::to_string(reg.from()) + "-" + std::to_string(reg.to())).c_str(), args.input_path().c_str(), strerror(errno)), EXIT_FAILURE;
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+    // Copy region from patch file
+    savvy::reader in_patch(args.patch_input_path());
+    in_patch.reset_bounds(reg);
+    if (!in_patch)
+      return std::fprintf(stderr, "Failed to query %s from %s : %s", (reg.chromosome() + ":" + std::to_string(reg.from()) + "-" + std::to_string(reg.to())).c_str(), args.input_path().c_str(), strerror(errno)), EXIT_FAILURE;
 
 
-	  savvy::variant rec_patch;
-	  while (in_patch >> rec_patch && rec_patch.position() >= reg.from() && rec_patch.position() < reg.to())
-	  {
-	    if (in_patch.bad())
-	      return std::fprintf(stderr, "Failed to read from %s\n", args.patch_input_path().c_str()), EXIT_FAILURE;
+    savvy::variant rec_patch;
+    while (in_patch >> rec_patch && rec_patch.position() >= reg.from() && rec_patch.position() < reg.to())
+    {
+      if (in_patch.bad())
+        return std::fprintf(stderr, "Failed to read from %s\n", args.patch_input_path().c_str()), EXIT_FAILURE;
 
-	    std::vector<std::string> info_fields_to_remove;
-	    for (const auto& f : rec_patch.info_fields())
-	    {
-	      if (out_info_keys.find(f.first) == out_info_keys.end())
-	        info_fields_to_remove.emplace_back(f.first);
-	    }
+      std::vector<std::string> info_fields_to_remove;
+      for (const auto& f : rec_patch.info_fields())
+      {
+        if (out_info_keys.find(f.first) == out_info_keys.end())
+          info_fields_to_remove.emplace_back(f.first);
+      }
 
-	    for (const auto& k : info_fields_to_remove)
-	      rec_patch.remove_info(k);
+      for (const auto& k : info_fields_to_remove)
+        rec_patch.remove_info(k);
 
-	    rec_patch.set_info("PATCH_VARIANT", std::vector<std::int8_t>());
+      rec_patch.set_info("PATCH_VARIANT", std::vector<std::int8_t>());
 
-	    if (!(out << rec_patch))
-	      return std::fprintf(stderr, "Failed to write to %s\n", args.output_path().c_str()), EXIT_FAILURE;
-	  }
-	  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
-	}
+      if (!(out << rec_patch))
+        return std::fprintf(stderr, "Failed to write to %s\n", args.output_path().c_str()), EXIT_FAILURE;
+    }
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+  }
 
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
-	// Copy records after last region
-	while (in)
-	{
+  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+  // Copy records after last region
+  while (in)
+  {
     if (!(out << rec))
       return std::fprintf(stderr, "Failed to write to %s\n", args.output_path().c_str()), EXIT_FAILURE;
-	  in >> rec;
-	}
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+    in >> rec;
+  }
+  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
   return out.good() && !in.bad() ? EXIT_SUCCESS : EXIT_FAILURE;
 }
